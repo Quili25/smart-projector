@@ -1,5 +1,5 @@
 ---
-description: LAN quality-gate workflow — push to Debian, read Hermes reports, no fix without approval
+description: LAN quality-gate workflow â€” push to Debian, read Hermes reports, no fix without approval
 alwaysApply: true
 ---
 
