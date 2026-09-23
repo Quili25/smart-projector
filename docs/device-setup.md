@@ -50,14 +50,35 @@ Firmware muy recortado no trae acceso a la app de Ajustes de Android. En ese cas
 
 Dentro de **Developer options** activa:
 
-- **ADB Debugging** (a veces aparece como *Depuración inalámbrica* o
-  *Network ADB*). Esto abre el puerto **5555** por Wi-Fi.
+- **USB Debugging**. En este firmware **ese interruptor es el que abre ADB por
+  red** en el puerto 5555; no existe un toggle separado de depuración
+  inalámbrica. Si tu versión sí muestra *ADB Debugging* o *Network ADB* por
+  separado, activa ese.
 - **Stay awake** / *Pantalla activa mientras se carga*, para que no se apague
   durante las pruebas.
 
-> **Evita "USB Debugging" en este equipo.** En el H713 activar el modo USB
-> debugging reconfigura el puerto y deja de funcionar todo lo que conectes por
-> USB (teclado, mouse, adaptador de red). Trabaja por red.
+> **Efecto secundario a tener presente.** En el H713 activar la depuración
+> reconfigura el puerto USB, así que lo que conectes físicamente (teclado, mouse,
+> adaptadores) puede dejar de funcionar mientras esté activa. Por eso trabajamos
+> por red y no por cable.
+
+Algunos firmwares no levantan el demonio hasta el siguiente arranque. Si no
+aparece, reinicia el proyector antes de darlo por perdido.
+
+### Si no logras habilitar ADB
+
+No es un bloqueo para usar SmartCast, solo para depurar cómodamente. Puedes
+instalar los APK sin ADB:
+
+1. Compila con `cd android; ./gradlew.bat assembleDebug`.
+2. Copia `android/receiver/build/outputs/apk/debug/receiver-debug.apk` a una
+   memoria USB.
+3. Conéctala al proyector y ábrela con su explorador de archivos, aceptando la
+   instalación de orígenes desconocidos.
+
+Lo que pierdes por esa vía es la configuración automática (exención de Doze,
+pantalla siempre encendida, autoarranque), que tendrías que ajustar a mano en los
+Ajustes de Android.
 
 ---
 

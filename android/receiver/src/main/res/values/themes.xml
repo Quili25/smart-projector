@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <style name="Theme.SmartProjector" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/surface_dark</item>
+        <item name="android:statusBarColor">@color/surface_dark</item>
+        <item name="android:navigationBarColor">@color/surface_dark</item>
+    </style>
+
+    <!-- Mirroring must never be letterboxed by system chrome or dimmed by the theme. -->
+    <style name="Theme.SmartProjector.Fullscreen" parent="Theme.SmartProjector">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowContentTransitions">false</item>
+    </style>
+
+</resources>

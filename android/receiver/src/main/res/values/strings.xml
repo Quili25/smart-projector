@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SmartCast Receptor</string>
+
+    <string name="idle_instructions">Abre SmartCast en tu celular y elige este proyector</string>
+    <string name="pin_label">Código de emparejamiento</string>
+    <string name="address_format">IP %1$s · puerto %2$d</string>
+    <string name="address_offline">Sin conexión de red</string>
+    <string name="connecting_format">Conectando con %1$s…</string>
+    <string name="failed_format">Error: %1$s</string>
+
+    <string name="notification_channel">Receptor SmartCast</string>
+    <string name="notification_listening">Listo para recibir pantalla</string>
+</resources>

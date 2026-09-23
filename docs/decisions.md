@@ -91,13 +91,93 @@ FEL con PhoenixUSBPro, con riesgo real de brickear el equipo.
 
 ---
 
-## D6 — Validar en hardware antes de invertir en el fork
+## D6 — Validar en hardware antes de invertir en el fork de AirPlay
 
-**Decisión:** primero instalar el APK de release upstream (v0.0.31, universal,
-incluye `armeabi-v7a`) y probar espejo real desde un dispositivo Apple.
+**Decisión:** para la parte de iOS, primero instalar el APK de release upstream
+(v0.0.31, universal, incluye `armeabi-v7a`) y probar espejo real desde un
+dispositivo Apple.
 
 **Razón:** hay tres incógnitas que ninguna cantidad de análisis resuelve y que
 determinan si el proyecto es viable: si el H713 expone un decodificador H.264 por
 hardware a MediaCodec, si 444 MB libres alcanzan para sostener el espejo, y si
 mDNS se propaga bien en la red. Si el hardware no da, conviene saberlo antes de
 construir el fork customizado.
+
+---
+
+## D11 — "USB Debugging" es el interruptor de ADB por red en el H713
+
+**Hallazgo:** el firmware de estos proyectores no expone un toggle separado de
+depuración por red. El interruptor etiquetado **USB Debugging** es el que abre el
+puerto 5555 por Wi-Fi, según lo documentado para el HY310 y L018 (mismo OEM
+Hotack, mismo SoC).
+
+**Advertencia:** en el H713 activar ese modo reconfigura el puerto USB y deja de
+funcionar lo que se conecte físicamente (teclado, mouse, adaptadores).
+
+**Respaldo si falla:** ADB solo se necesita para depurar cómodo. Para instalar
+basta copiar el APK a una USB y abrirlo con el explorador de archivos.
+
+---
+
+## D12 — Espejo propio para Android, en vez de una app de terceros
+
+**Decisión:** construir emisor y receptor propios.
+
+**Razón:** decisión de producto de Omar. Las opciones gratuitas (AirScreen,
+LetsView, ApowerMirror) imponen marca de agua, cortes por tiempo y SDKs de
+publicidad que solicitan permisos que un receptor de pantalla no justifica, en un
+aparato que vive permanentemente conectado a la red doméstica y a la pantalla.
+
+Como instalamos ambos extremos, no dependemos de certificar nada con Google ni
+Apple, y podemos autenticar el emparejamiento en serio.
+
+---
+
+## D13 — Protocolo propio sobre TCP
+
+**Decisión:** H.264 sobre una conexión TCP, descubrimiento por mDNS.
+
+**Razón:** para un emisor Android no existe alternativa estándar. Miracast exige
+soporte de *sink* del fabricante, que este firmware no tiene, y Google Cast está
+licenciado. Un protocolo propio es además más simple y confiable que emular uno
+ajeno cuando controlamos los dos extremos.
+
+TCP sobre UDP: en una LAN la latencia añadida es pequeña frente al pipeline de
+codificación y decodificación, y perder un fragmento de una trama H.264 produce
+artefactos mucho peores que esperar una retransmisión.
+
+**Seguridad:** el receptor escucha en la red local, así que valida longitudes
+antes de reservar memoria, rechaza tramas mayores al límite, verifica un número
+mágico para descartar escáneres de puertos, y exige un PIN comparado en tiempo
+constante con rotación tras varios intentos fallidos.
+
+---
+
+## D14 — El receptor es una sola Activity
+
+**Decisión:** una única pantalla que alterna entre estado de espera y superficie
+de video, en vez de dos Activities.
+
+**Razón:** desde Android 10 un servicio en segundo plano no puede lanzar una
+Activity. Un receptor con pantalla de espejo separada dependería de esa capacidad
+justo cuando llega una conexión. Con una sola pantalla el problema desaparece: la
+que ya está abierta es la que renderiza. Además consume menos memoria, lo que
+importa con ~444 MB libres.
+
+El `SurfaceView` permanece siempre montado, nunca `GONE`: solo posee una
+superficie nativa mientras está adjunto y medido, y el decodificador la necesita
+antes de que llegue la primera trama.
+
+---
+
+## D15 — El espejo no servirá para Netflix, Prime ni Disney+
+
+**Hallazgo, no decisión.** Esas apps marcan su ventana con `FLAG_SECURE`, y tanto
+Android como iOS entregan negro a cualquier captura de pantalla. Ninguna app de
+espejo puede evitarlo; las que prometen lo contrario dependen de que el servicio
+no aplique la protección.
+
+**Camino para esos servicios:** instalarlos directamente en el proyector, que es
+un Android 11. Ojo: sin certificación Widevine L1, Netflix suele limitarse a
+definición estándar.

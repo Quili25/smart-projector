@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SmartCast</string>
+
+    <string name="searching">Buscando proyectores en tu red…</string>
+    <string name="no_receivers">No se encontró ningún proyector.\nRevisa que esté encendido y en la misma red Wi-Fi.</string>
+    <string name="receivers_found">Toca un proyector para compartir tu pantalla</string>
+
+    <string name="pin_dialog_title">Código de emparejamiento</string>
+    <string name="pin_dialog_message">Escribe el código de 6 dígitos que aparece en el proyector.</string>
+    <string name="pin_hint">000000</string>
+    <string name="connect">Conectar</string>
+    <string name="cancel">Cancelar</string>
+    <string name="stop">Detener</string>
+
+    <string name="connecting_to">Conectando con %1$s…</string>
+    <string name="casting_to">Compartiendo pantalla con %1$s</string>
+    <string name="casting_resolution">%1$d x %2$d</string>
+
+    <string name="error_pin">Código incorrecto. Inténtalo de nuevo.</string>
+    <string name="error_busy">Otro dispositivo ya está compartiendo pantalla.</string>
+    <string name="error_version">Las versiones de SmartCast no coinciden. Actualiza ambas apps.</string>
+    <string name="error_connection">Se perdió la conexión con el proyector.</string>
+    <string name="error_permission">Necesitas permitir la captura de pantalla para compartir.</string>
+
+    <string name="notification_channel">Compartir pantalla</string>
+    <string name="notification_casting">Compartiendo pantalla</string>
+</resources>
