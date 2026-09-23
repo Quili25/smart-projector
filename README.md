@@ -43,7 +43,17 @@ Alternativas abiertas para el lado Google, si más adelante se quieren:
 
 # 2. Levantar el perfil real del hardware (ABI, decoders, RAM)
 ./scripts/Get-DeviceProfile.ps1
+
+# 3. Instalar y configurar el receptor AirPlay
+./scripts/Deploy-AirPlay.ps1
 ```
+
+El paso 3 descarga una release fijada de upstream, **verifica su SHA-256** antes
+de instalar, y deja el proyector configurado para no apagar pantalla ni congelar
+el servicio por Doze.
+
+Después: en el iPhone o Mac, **Centro de Control → Duplicar pantalla**. El
+proyector aparece como destino AirPlay.
 
 ## Ramas
 

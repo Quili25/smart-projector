@@ -24,3 +24,16 @@ publish/
 releases/
 .gate-reports/
 *.user
+
+# Downloaded/built artifacts
+.cache/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Android / Gradle
+.gradle/
+local.properties
+captures/
+.cxx/
