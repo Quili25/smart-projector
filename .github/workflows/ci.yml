@@ -1,0 +1,22 @@
+# CI — smart-projector (generic)
+name: CI
+
+on:
+  push:
+    branches: [staging, main]
+  pull_request:
+    branches: [staging, main]
+
+concurrency:
+  group: ci-smart-projector-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Smoke
+        run: |
+          test -n "$(ls -A)" 
+          echo "generic CI ok for smart-projector"

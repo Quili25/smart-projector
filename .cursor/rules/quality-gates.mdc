@@ -1,0 +1,27 @@
+---
+description: LAN quality-gate workflow — push to Debian, read Hermes reports, no fix without approval
+alwaysApply: true
+---
+
+# Quality gates (smart-projector)
+
+Dev client is Windows. Gates (build/test/security/Hermes) run on **Debian LAN**.
+
+## Day-to-day
+
+1. Commit on `staging`.
+2. `./scripts/push-and-wait.ps1 -ProjectId smart-projector` (or `git push lan staging`).
+3. Read `.gate-reports/last-result.json` and `.gate-reports/last-report.md`.
+
+## On FAIL
+
+Summarize findings, propose a remediation plan, **stop**. Do not change product code until human approval.
+
+## On PASS (release)
+
+Promote on Debian only (`-Promote` or `promote-to-github.sh`). Do not `git push origin main` as the normal path from Windows.
+
+## Hard rules
+
+- Never reimplement gitleaks/Trivy/Hermes on this PC.
+- Never commit `.gate-reports/`.

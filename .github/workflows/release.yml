@@ -1,0 +1,72 @@
+# Release — tag only + GitHub Release notes (no R2). smart-projector
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "SemVer bump"
+        required: true
+        default: patch
+        type: choice
+        options: [patch, minor, major, skip]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-smart-projector-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    if: ${{ github.ref == 'refs/heads/main' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Detect bump
+        id: bump
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            kind="${{ inputs.bump }}"
+          else
+            msg=$(git log -1 --pretty=%B)
+            kind=$(pwsh -File ./scripts/detect-version-bump.ps1 -Message "$msg" | tail -n1)
+          fi
+          echo "kind=$kind" >> "$GITHUB_OUTPUT"
+
+      - name: Bump and tag
+        if: ${{ steps.bump.outputs.kind != 'skip' }}
+        id: version
+        shell: pwsh
+        env:
+          BUMP_KIND: ${{ steps.bump.outputs.kind }}
+        run: |
+          $v = & ./scripts/bump-version.ps1 -Bump $env:BUMP_KIND.Trim()
+          $v = ($v | Select-Object -Last 1).ToString().Trim()
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION
+          git commit -m "chore: release $v [skip release]"
+          git tag -a "v$v" -m "Release $v"
+          git push origin HEAD:refs/heads/main
+          git push origin "refs/tags/v$v"
+          echo "version=$v" >> $env:GITHUB_OUTPUT
+          echo "tag=v$v" >> $env:GITHUB_OUTPUT
+
+      - name: GitHub Release
+        if: ${{ steps.bump.outputs.kind != 'skip' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" --title "smart-projector $VERSION" --notes "Release $VERSION"
