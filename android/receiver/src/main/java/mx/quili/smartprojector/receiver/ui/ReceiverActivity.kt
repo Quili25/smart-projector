@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.SurfaceHolder
 import android.view.View
 import android.view.WindowManager
@@ -17,13 +18,20 @@ import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.coroutines.launch
 import mx.quili.smartprojector.protocol.Protocol
+import mx.quili.smartprojector.receiver.BuildConfig
 import mx.quili.smartprojector.receiver.R
 import mx.quili.smartprojector.receiver.core.ReceiverState
 import mx.quili.smartprojector.receiver.core.ReceiverStatus
 import mx.quili.smartprojector.receiver.databinding.ActivityReceiverBinding
 import mx.quili.smartprojector.receiver.media.MirrorSurface
 import mx.quili.smartprojector.receiver.service.ReceiverService
+import mx.quili.smartprojector.updates.AvailableUpdate
+import mx.quili.smartprojector.updates.UpdateChecker
+import mx.quili.smartprojector.updates.UpdateConfig
+import mx.quili.smartprojector.updates.UpdateDownload
+import mx.quili.smartprojector.updates.UpdateMonitor
 import kotlin.math.min
+import mx.quili.smartprojector.updates.R as UpdatesR
 
 /**
  * The receiver's only screen.
@@ -36,6 +44,13 @@ import kotlin.math.min
 class ReceiverActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityReceiverBinding
+
+    private val updates = UpdateMonitor(
+        UpdateChecker(UpdateConfig(BuildConfig.UPDATE_MANIFEST_URL, BuildConfig.VERSION_CODE)),
+    )
+
+    /** Non-null while a newer build is offered; the remote's OK key downloads it. */
+    private var pendingUpdate: AvailableUpdate? = null
 
     private val notificationPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -70,6 +85,22 @@ class ReceiverActivity : AppCompatActivity() {
         requestNotificationPermissionIfNeeded()
         ReceiverService.start(this)
         observeState()
+        observeUpdates()
+    }
+
+    /**
+     * A projector is driven by a remote, so the download is bound to OK rather than a
+     * button nobody can reach. Mirroring takes the key back: interrupting a cast to open a
+     * browser is never what the press meant.
+     */
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val confirm = keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+        val update = pendingUpdate
+        if (confirm && update != null && binding.idlePanel.visibility == View.VISIBLE) {
+            UpdateDownload.open(this, update)
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
     }
 
     override fun onDestroy() {
@@ -83,6 +114,32 @@ class ReceiverActivity : AppCompatActivity() {
                 ReceiverStatus.state.collect(::render)
             }
         }
+    }
+
+    private fun observeUpdates() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { updates.poll() }
+                updates.available.collect(::renderUpdate)
+            }
+        }
+    }
+
+    private fun renderUpdate(update: AvailableUpdate?) {
+        pendingUpdate = update
+        if (update == null) {
+            binding.update.visibility = View.GONE
+            return
+        }
+
+        val headline = getString(UpdatesR.string.update_available, update.versionName, update.sizeMb)
+        val action = if (UpdateDownload.isAvailable(this, update)) {
+            getString(UpdatesR.string.update_action_remote)
+        } else {
+            getString(UpdatesR.string.update_manual, update.apkUrl)
+        }
+        binding.update.text = "$headline\n$action"
+        binding.update.visibility = View.VISIBLE
     }
 
     private fun render(state: ReceiverState) {

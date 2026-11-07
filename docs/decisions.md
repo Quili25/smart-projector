@@ -181,3 +181,68 @@ no aplique la protección.
 **Camino para esos servicios:** instalarlos directamente en el proyector, que es
 un Android 11. Ojo: sin certificación Widevine L1, Netflix suele limitarse a
 definición estándar.
+
+---
+
+## D16 — Los APK se publican en la LAN, no se commitean
+
+**Decisión:** `scripts/Publish-Lan.ps1` sube los dos APK firmados al nginx del
+Debian (`/mnt/Z/lan-apk/public/smart-projector/`), igual que `gym-tracker` y
+`meal-plan`. Git no guarda binarios.
+
+**Razón:** un APK son ~6 MB por build y git los guarda para siempre; en unas
+decenas de publicaciones el repo pesaría más que todo el código. Además un binario
+commiteado no dice con qué llave se firmó ni de qué commit salió, mientras que el
+`latest.json` publicado lleva commit, tamaño y SHA-256.
+
+Reusar el servidor que ya existe también evita montar infraestructura nueva: basta
+crear un subdirectorio, porque ese nginx sirve todo el árbol público.
+
+**Compatibilidad:** el esquema de `latest.json` se mantiene idéntico al de las
+otras apps de la casa (`schemaVersion` 1), así que los clientes son
+intercambiables.
+
+---
+
+## D17 — La actualización la instala el navegador, no la app
+
+**Decisión:** cuando hay un build nuevo, la app abre la URL del APK con
+`ACTION_VIEW`. El navegador lo descarga y se lo pasa al instalador de Android.
+Ninguna de las dos pide `REQUEST_INSTALL_PACKAGES`.
+
+**Razón:** ese permiso convierte a la app en un instalador silencioso. El receptor
+vive encendido en la red de la casa y consulta un manifiesto por HTTP plano; si
+alguien lograra responder por el servidor, la diferencia entre "abre una descarga"
+y "instala lo que le manden" es toda la diferencia. El costo es un toque extra del
+usuario, que además ve lo que está instalando.
+
+Defensas que sí lleva el cliente:
+
+- El manifiesto solo puede nombrar un archivo suelto junto a sí mismo, resuelto
+  contra la URL del propio manifiesto, así que no puede redirigir a otro host.
+- Nada de redirecciones HTTP, cuerpo limitado a 16 KB y tiempos de espera cortos.
+- HTTP plano permitido únicamente para el host del hub, vía
+  `network_security_config.xml`.
+
+**Lo que no hace:** verificar el SHA-256 del APK descargado, porque la descarga
+ocurre fuera de la app. Quien firma verifica el hash al subir, y Android rechaza
+cualquier APK que no venga firmado con la misma llave que el instalado. Esa
+comprobación de firma es la que realmente protege la actualización.
+
+**Adaptación al proyector:** no hay dónde tocar un banner con un control remoto,
+así que el receptor pinta el aviso en la pantalla de espera y lo descarga con la
+tecla **OK**. Si el firmware no trae navegador, muestra la URL para instalarlo a
+mano en vez de ofrecer un botón muerto.
+
+---
+
+## D18 — Debug y release son aplicaciones distintas
+
+**Decisión:** los builds de debug llevan el sufijo `.debug` en el `applicationId`
+y traen la consulta de actualizaciones apagada.
+
+**Razón:** Android rechaza una actualización firmada con otra llave. Sin el
+sufijo, un APK de debug instalado durante el desarrollo bloquearía la instalación
+del APK publicado, y la única salida sería desinstalar y perder el emparejamiento.
+Separarlos deja que convivan, y apagar la consulta evita ofrecerle al usuario una
+descarga que el sistema va a rechazar.

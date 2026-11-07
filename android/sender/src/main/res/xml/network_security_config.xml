@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    The update check is plain HTTP against the house hub, so cleartext is allowed for that
+    host and nothing else. This policy governs Android's HTTP stacks only; the mirroring
+    socket is a raw TCP connection and is unaffected.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">192.168.0.165</domain>
+    </domain-config>
+</network-security-config>

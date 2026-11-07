@@ -19,6 +19,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import kotlinx.coroutines.launch
 import mx.quili.smartprojector.protocol.Pairing
+import mx.quili.smartprojector.sender.BuildConfig
 import mx.quili.smartprojector.sender.R
 import mx.quili.smartprojector.sender.core.CastFailure
 import mx.quili.smartprojector.sender.core.CastState
@@ -29,6 +30,12 @@ import mx.quili.smartprojector.sender.databinding.ActivityMainBinding
 import mx.quili.smartprojector.sender.databinding.DialogPinBinding
 import mx.quili.smartprojector.sender.net.MdnsDiscovery
 import mx.quili.smartprojector.sender.service.CastService
+import mx.quili.smartprojector.updates.AvailableUpdate
+import mx.quili.smartprojector.updates.UpdateChecker
+import mx.quili.smartprojector.updates.UpdateConfig
+import mx.quili.smartprojector.updates.UpdateDownload
+import mx.quili.smartprojector.updates.UpdateMonitor
+import mx.quili.smartprojector.updates.R as UpdatesR
 
 /** Picks a receiver, handles pairing, and starts or stops the cast. */
 class MainActivity : AppCompatActivity() {
@@ -37,6 +44,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var prefs: SenderPrefs
 
     private var discovery: MdnsDiscovery? = null
+
+    private val updates = UpdateMonitor(
+        UpdateChecker(UpdateConfig(BuildConfig.UPDATE_MANIFEST_URL, BuildConfig.VERSION_CODE)),
+    )
 
     private val adapter = ReceiverAdapter(::onReceiverSelected)
 
@@ -77,6 +88,7 @@ class MainActivity : AppCompatActivity() {
 
         requestNotificationPermissionIfNeeded()
         observeState()
+        observeUpdates()
     }
 
     override fun onStart() {
@@ -101,6 +113,34 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 CastStatus.state.collect(::render)
+            }
+        }
+    }
+
+    /**
+     * Checks while the screen is up, so a build published after the phone was last opened
+     * still gets noticed without a service running in the background.
+     */
+    private fun observeUpdates() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { updates.poll() }
+                updates.available.collect(::renderUpdate)
+            }
+        }
+    }
+
+    private fun renderUpdate(update: AvailableUpdate?) {
+        if (update == null) {
+            binding.updateBanner.visibility = View.GONE
+            return
+        }
+
+        binding.updateBanner.visibility = View.VISIBLE
+        binding.updateTitle.text = getString(UpdatesR.string.update_available, update.versionName, update.sizeMb)
+        binding.updateBanner.setOnClickListener {
+            if (!UpdateDownload.open(this, update)) {
+                toast(getString(UpdatesR.string.update_no_browser, update.apkUrl))
             }
         }
     }

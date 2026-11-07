@@ -47,8 +47,10 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $AndroidRoot = Join-Path $RepoRoot 'android'
 
-$ReceiverPackage = 'mx.quili.smartprojector.receiver'
-$SenderPackage = 'mx.quili.smartprojector.sender'
+# Debug builds carry a .debug application id so they can sit next to a release installed
+# from the LAN page, whose signature they could never update.
+$PackageSuffix = if ($BuildType -eq 'debug') { '.debug' } else { '' }
+$ReceiverPackage = "mx.quili.smartprojector.receiver$PackageSuffix"
 
 function Resolve-Adb {
     $cmd = Get-Command adb -ErrorAction SilentlyContinue

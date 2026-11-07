@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared by both apps so the update wording stays identical on the phone and the wall. -->
+<resources>
+    <string name="update_available">Actualización disponible: %1$s · %2$s MB</string>
+    <string name="update_action">Toca para descargar e instalar</string>
+    <string name="update_action_remote">Pulsa OK en el control para descargarla</string>
+    <string name="update_manual">Descárgala desde %1$s</string>
+    <string name="update_no_browser">Este dispositivo no tiene navegador. Descárgala desde %1$s</string>
+</resources>

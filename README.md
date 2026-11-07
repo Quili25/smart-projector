@@ -12,6 +12,7 @@ sin anuncios, sin marca de agua y sin límite de tiempo.
 | `android/receiver` | Proyector | Escucha, decodifica H.264 por hardware y pinta a pantalla completa |
 | `android/sender` | Celular Android | Captura la pantalla, codifica H.264 y la transmite |
 | `android/protocol` | Compartido | Formato de cable, handshake y emparejamiento |
+| `android/updates` | Compartido | Consulta de actualizaciones contra la página LAN |
 
 **AirPlay** — para iPhone, iPad y Mac no hace falta app emisora: iOS ya lo trae.
 Se usa un receptor open source existente, ver [docs/decisions.md](docs/decisions.md).
@@ -41,6 +42,35 @@ Todo lo demás se espeja bien: YouTube, fotos, navegador, juegos, presentaciones
 
 Otras limitaciones actuales: solo un emisor a la vez, y el audio todavía no se
 transmite (el protocolo ya lo contempla).
+
+## Distribución y actualizaciones
+
+Las apps se descargan de la página LAN que sirve el Debian de la casa, el mismo
+nginx que usan `gym-tracker` y `meal-plan`:
+
+<http://192.168.0.165:8088/smart-projector/>
+
+Los APK **no viven en git**: `scripts/Publish-Lan.ps1` compila las versiones de
+release firmadas y las sube junto con un `latest.json` por app. Cada app instalada
+consulta ese manifiesto y avisa cuando hay un build más nuevo. En el celular el
+aviso es un banner que se toca; en el proyector es una línea en la pantalla de
+espera y se descarga con **OK** del control.
+
+Ninguna de las dos instala paquetes por su cuenta: el APK se le entrega al
+navegador, que a su vez se lo entrega al instalador de Android. Por eso ninguna
+pide `REQUEST_INSTALL_PACKAGES`, un permiso que convierte a la app en un vector de
+instalación silenciosa si alguien logra responder por el servidor.
+
+El manifiesto solo puede nombrar un archivo suelto junto a sí mismo, así que un
+`latest.json` manipulado no puede mandar al dispositivo a otro host.
+
+```powershell
+# Una sola vez: crea la llave de firma (guárdala fuera de esta máquina)
+./scripts/Publish-Lan.ps1 -InitKeystore
+
+# Publicar el HEAD de staging, previo PASS de los gates
+./scripts/Publish-Lan.ps1
+```
 
 ## Requisitos
 
@@ -82,12 +112,18 @@ Luego, en el iPhone: **Centro de Control → Duplicar pantalla**.
 
 ```powershell
 cd android
-./gradlew.bat :protocol:test          # tests del protocolo
+./gradlew.bat test                    # protocol, updates y el versionado
 ./gradlew.bat assembleDebug           # ambos APKs
+./gradlew.bat printVersion            # la versión que produciría este commit
 ```
 
 El módulo `protocol` es una librería JVM pura, así que el formato de cable y la
 lógica de emparejamiento se prueban sin emulador ni dispositivo.
+
+Los builds de debug llevan el sufijo `.debug` en su `applicationId` y traen la
+consulta de actualizaciones apagada: su firma es distinta a la de release, así que
+el APK de la página LAN nunca podría instalarse encima. Pueden convivir con el
+build publicado sin pisarlo.
 
 ## Ramas
 

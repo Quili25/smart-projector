@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        Reading latest.json is the only network access this module needs. It never installs
+        anything: the APK is handed to the browser, which hands it to Android's installer,
+        so neither app asks for REQUEST_INSTALL_PACKAGES.
+    -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <!--
+        Android 11+ hides other packages unless they are declared here. Without this the
+        browser is invisible to resolveActivity() and the download offer looks unavailable
+        even when a browser is installed.
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="http" />
+        </intent>
+    </queries>
+
+</manifest>
