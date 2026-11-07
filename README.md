@@ -74,7 +74,12 @@ El manifiesto solo puede nombrar un archivo suelto junto a sí mismo, así que u
 
 ## Requisitos
 
-- ADB habilitado en el proyector — ver [docs/device-setup.md](docs/device-setup.md)
+Para **usar** las apps no hace falta ADB: se instalan desde
+<http://192.168.0.165:8088/smart-projector/>, ver [docs/device-setup.md](docs/device-setup.md).
+
+Para **desarrollar** en el proyector:
+
+- ADB habilitado — ver la misma guía
 - Android SDK platform-tools (`adb`) y JDK 17
 - PowerShell 5.1+
 

@@ -65,20 +65,28 @@ Dentro de **Developer options** activa:
 Algunos firmwares no levantan el demonio hasta el siguiente arranque. Si no
 aparece, reinicia el proyector antes de darlo por perdido.
 
-### Si no logras habilitar ADB
+### Instalar sin ADB (página LAN)
 
-No es un bloqueo para usar SmartCast, solo para depurar cómodamente. Puedes
-instalar los APK sin ADB:
+No es un bloqueo para usar SmartCast, solo para depurar cómodamente. Los APK de
+release viven en la misma página que `gym-tracker` y `meal-plan`:
 
-1. Compila con `cd android; ./gradlew.bat assembleDebug`.
-2. Copia `android/receiver/build/outputs/apk/debug/receiver-debug.apk` a una
-   memoria USB.
-3. Conéctala al proyector y ábrela con su explorador de archivos, aceptando la
-   instalación de orígenes desconocidos.
+<http://192.168.0.165:8088/smart-projector/>
 
-Lo que pierdes por esa vía es la configuración automática (exención de Doze,
-pantalla siempre encendida, autoarranque), que tendrías que ajustar a mano en los
-Ajustes de Android.
+**Celular.** Ábrela en Chrome (misma Wi-Fi de casa), toca **SmartCast** y
+permite que el navegador instale apps la primera vez.
+
+**Proyector.** Si trae navegador, abre la misma URL y elige **SmartCast Receptor**.
+Si no, descarga ese APK en el celular, pásalo a una memoria USB e instálalo desde
+el explorador de archivos del proyector, aceptando orígenes desconocidos.
+
+Instala **solo** esos APK de release. Un build de debug (`applicationId` con
+sufijo `.debug`, o firmado con otra llave) no se puede actualizar por Wi-Fi:
+Android rechaza el reemplazo. Si instalaste uno antes, desinstálalo y usa el de
+la página.
+
+Lo que pierdes por esta vía, frente a `Deploy-SmartCast.ps1`, es la configuración
+automática (exención de Doze, pantalla siempre encendida, autoarranque). Esos
+ajustes se hacen a mano en Ajustes de Android si hace falta.
 
 ---
 
