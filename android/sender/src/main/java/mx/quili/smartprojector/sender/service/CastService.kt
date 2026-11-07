@@ -287,9 +287,15 @@ class CastService : Service() {
     /** Bridges encoder output onto the wire. */
     private inner class FrameSink(private val packetWriter: PacketWriter) : ScreenEncoder.Sink {
 
+        private var lastConfig: VideoConfig? = null
+
         override fun onCodecConfig(codecSpecificData: ByteArray) {
             val active = encoder ?: return
             val config = VideoConfig(active.width, active.height, codecSpecificData)
+            // Most encoders report SPS/PPS twice at startup; a repeat would make the
+            // receiver rebuild its decoder for nothing.
+            if (config == lastConfig) return
+            lastConfig = config
             packetWriter.write(PacketType.VIDEO_CONFIG, payload = config.encode())
             configSent = true
             // The receiver builds its decoder on this packet, so the first frame after

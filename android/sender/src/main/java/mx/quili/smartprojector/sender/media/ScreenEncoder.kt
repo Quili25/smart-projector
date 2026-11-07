@@ -52,6 +52,13 @@ class ScreenEncoder(
             setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
             setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, I_FRAME_INTERVAL_SECONDS)
 
+            // KEY_FRAME_RATE only informs rate control. A VirtualDisplay delivers frames at
+            // the phone's refresh rate, 90 or 120 Hz on many current phones, and without
+            // this cap the encoder emits every one of them.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                setFloat(MediaFormat.KEY_MAX_FPS_TO_ENCODER, frameRate.toFloat())
+            }
+
             // A still screen produces no frames at all, which looks identical to a
             // frozen connection and leaves a late joiner with nothing to decode.
             // Repeating the last frame keeps the pipeline warm for a few kbit/s.

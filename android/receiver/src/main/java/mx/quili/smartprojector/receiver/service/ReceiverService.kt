@@ -243,7 +243,12 @@ class ReceiverService : Service() {
         private const val WAKE_LOCK_TAG = "smartcast:receiver"
         private const val DEFAULT_NAME = "Proyector"
         private const val MIN_FPS = 24
-        private const val MAX_FPS = 60
+
+        /**
+         * Mirroring needs no more, and 60 leaves the H713's decoder and 60 Hz panel no
+         * headroom: any hiccup turns into delay the stream never recovers.
+         */
+        private const val MAX_FPS = 30
 
         fun start(context: Context) {
             val intent = Intent(context, ReceiverService::class.java)

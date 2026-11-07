@@ -14,6 +14,7 @@ import mx.quili.smartprojector.protocol.writeWelcome
 import mx.quili.smartprojector.receiver.core.PairingStore
 import mx.quili.smartprojector.receiver.core.ReceiverState
 import mx.quili.smartprojector.receiver.core.ReceiverStatus
+import mx.quili.smartprojector.receiver.media.LatencyGuard
 import mx.quili.smartprojector.receiver.media.MirrorSurface
 import mx.quili.smartprojector.receiver.media.VideoDecoder
 import java.io.EOFException
@@ -38,6 +39,10 @@ class SenderSession(
 ) {
 
     private var decoder: VideoDecoder? = null
+    private var decoderConfig: VideoConfig? = null
+
+    private val latency = LatencyGuard { System.nanoTime() / 1_000 }
+    private var framesSkipped = 0L
 
     fun run() {
         try {
@@ -66,6 +71,7 @@ class SenderSession(
         } finally {
             decoder?.close()
             decoder = null
+            decoderConfig = null
             runCatching { socket.close() }
         }
     }
@@ -128,12 +134,13 @@ class SenderSession(
 
                 PacketType.VIDEO_FRAME -> {
                     val active = decoder
-                    if (active == null) {
-                        // Frames before the config packet cannot be decoded; dropping
-                        // them keeps the stream aligned until the next config arrives.
-                        reader.skipPayload(header.payloadLength)
-                    } else {
+                    // Frames before the config packet cannot be decoded, and frames the
+                    // latency guard rejects would only add delay. Skipping still reads
+                    // them off the socket so the stream stays aligned.
+                    if (active != null && admit(header.presentationTimeUs, header.isKeyframe)) {
                         feed(active, reader, header.presentationTimeUs, header.isKeyframe, header.payloadLength)
+                    } else {
+                        reader.skipPayload(header.payloadLength)
                     }
                 }
 
@@ -169,21 +176,43 @@ class SenderSession(
         }
 
         if (!accepted) {
-            // No input buffer was free. Draining may release one, but the payload has
-            // to leave the socket either way or the stream desynchronizes.
-            decoder.render()
+            // The payload has to leave the socket either way or the stream desynchronizes.
             reader.skipPayload(length)
-            Log.w(TAG, "Dropped a frame: decoder input was full")
+            latency.onFrameLost()
+            Log.w(TAG, "Decoder input full; waiting for the next keyframe")
             return
         }
 
         decoder.render()
     }
 
-    /** Replaces the decoder whenever the sender announces a new format. */
+    /** Consults the latency guard and logs only when skipping starts or stops. */
+    private fun admit(presentationTimeUs: Long, isKeyframe: Boolean): Boolean {
+        val wasSkipping = latency.isSkipping
+        val decode = latency.shouldDecode(presentationTimeUs, isKeyframe)
+
+        if (!decode) {
+            framesSkipped++
+        } else if (wasSkipping && framesSkipped > 0) {
+            Log.i(TAG, "Resumed on a keyframe after skipping $framesSkipped frames")
+            framesSkipped = 0
+        }
+        return decode
+    }
+
+    /**
+     * Replaces the decoder whenever the sender announces a new format.
+     *
+     * Encoders commonly report the same SPS/PPS twice at startup (as a format change and
+     * as a codec-config buffer). Rebuilding for a repeat throws away the frames already
+     * queued and stalls the stream while the hardware decoder reinitializes.
+     */
     private fun startDecoder(config: VideoConfig, senderName: String) {
+        if (decoder != null && config == decoderConfig) return
+
         decoder?.close()
         decoder = null
+        decoderConfig = null
 
         val surface = MirrorSurface.await(SURFACE_TIMEOUT_MS)
         if (surface == null) {
@@ -191,6 +220,9 @@ class SenderSession(
         }
 
         decoder = VideoDecoder(surface, config.width, config.height, config.codecSpecificData)
+        decoderConfig = config
+        latency.reset()
+        framesSkipped = 0
         ReceiverStatus.publish(ReceiverState.Mirroring(senderName, config.width, config.height))
         Log.i(TAG, "Decoding ${config.width}x${config.height} from '$senderName'")
     }

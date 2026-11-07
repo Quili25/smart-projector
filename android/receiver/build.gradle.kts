@@ -96,4 +96,6 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.google.material)
     implementation(libs.kotlinx.coroutines.android)
+
+    testImplementation(libs.junit)
 }

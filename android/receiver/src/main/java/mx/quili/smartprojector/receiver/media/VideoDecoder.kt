@@ -1,10 +1,12 @@
 package mx.quili.smartprojector.receiver.media
 
 import android.media.MediaCodec
+import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.os.Build
 import android.util.Log
 import android.view.Surface
+import mx.quili.smartprojector.protocol.Protocol
 import java.io.Closeable
 import java.nio.ByteBuffer
 
@@ -37,7 +39,14 @@ class VideoDecoder(
             // instead of waiting to parse them out of the stream.
             setByteBuffer("csd-0", ByteBuffer.wrap(codecSpecificData))
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Sized for a keyframe at this resolution. Some vendor decoders default to
+            // input buffers smaller than an IDR, and an oversized frame ends the session.
+            setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, maxInputSize(width, height))
+
+            // ACodec treats an unsupported low-latency request as a fatal configure
+            // error rather than ignoring it; the Allwinner decoder in the H713 is one
+            // that refuses. Only ask when the codec advertises the feature.
+            if (supportsLowLatency(codec)) {
                 setInteger(MediaFormat.KEY_LOW_LATENCY, 1)
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -63,8 +72,8 @@ class VideoDecoder(
      * [fill] receives the codec's input buffer and must write exactly [length] bytes,
      * which lets the caller copy straight from the socket with no intermediate array.
      *
-     * @return false when no input buffer became available in time; the caller should
-     *         drain output and retry.
+     * @return false when no input buffer became available even after draining output;
+     *         the caller must discard the payload.
      */
     fun submit(
         presentationTimeUs: Long,
@@ -74,7 +83,7 @@ class VideoDecoder(
     ): Boolean {
         check(running) { "Decoder is closed" }
 
-        val index = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
+        val index = dequeueInput()
         if (index < 0) return false
 
         val buffer = requireNotNull(codec.getInputBuffer(index)) {
@@ -95,26 +104,51 @@ class VideoDecoder(
         return true
     }
 
-    /** Releases every ready frame to the surface. Cheap to call after each submit. */
+    /**
+     * Input runs out when decoded frames are still waiting to be released to the surface,
+     * so one drain-and-retry recovers most stalls. Dropping instead costs far more: a lost
+     * P-frame corrupts every picture until the next keyframe, up to a second later.
+     */
+    private fun dequeueInput(): Int {
+        val index = codec.dequeueInputBuffer(INPUT_TIMEOUT_US)
+        if (index >= 0) return index
+        render()
+        return codec.dequeueInputBuffer(RETRY_INPUT_TIMEOUT_US)
+    }
+
+    /**
+     * Drains every ready frame and shows only the newest.
+     *
+     * Older frames are released without rendering: queueing them on the surface would
+     * hold the codec's output buffers until the display consumed each one, and a decoder
+     * with no free output buffers stops taking input. Cheap to call after each submit.
+     */
     fun render() {
         if (!running) return
 
+        var newest = NONE
         while (true) {
             val index = codec.dequeueOutputBuffer(bufferInfo, OUTPUT_TIMEOUT_US)
             when {
                 index >= 0 -> {
-                    val hasContent = bufferInfo.size > 0
-                    codec.releaseOutputBuffer(index, hasContent)
-                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
+                    if (newest != NONE) codec.releaseOutputBuffer(newest, false)
+                    if (bufferInfo.size > 0) {
+                        newest = index
+                    } else {
+                        codec.releaseOutputBuffer(index, false)
+                        newest = NONE
+                    }
+                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) break
                 }
 
                 index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
                     Log.i(TAG, "Output format is now ${codec.outputFormat}")
                 }
 
-                else -> return
+                else -> break
             }
         }
+        if (newest != NONE) codec.releaseOutputBuffer(newest, true)
     }
 
     override fun close() {
@@ -129,12 +163,28 @@ class VideoDecoder(
         const val TAG = "VideoDecoder"
         const val MIME_TYPE = MediaFormat.MIMETYPE_VIDEO_AVC
 
+        fun supportsLowLatency(codec: MediaCodec): Boolean {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return false
+            return runCatching {
+                codec.codecInfo.getCapabilitiesForType(MIME_TYPE)
+                    .isFeatureSupported(MediaCodecInfo.CodecCapabilities.FEATURE_LowLatency)
+            }.getOrDefault(false)
+        }
+
+        /** One byte per pixel, which comfortably exceeds an H.264 IDR at mirroring bitrates. */
+        fun maxInputSize(width: Int, height: Int): Int =
+            (width * height).coerceIn(MIN_INPUT_BYTES, Protocol.MAX_PAYLOAD_BYTES)
+
+        const val MIN_INPUT_BYTES = 512 * 1024
+
         /**
          * Short waits keep the session thread responsive: a blocked dequeue would also
          * stall the socket reader and let the sender's buffers pile up.
          */
         const val INPUT_TIMEOUT_US = 10_000L
+        const val RETRY_INPUT_TIMEOUT_US = 40_000L
         const val OUTPUT_TIMEOUT_US = 0L
+        const val NONE = -1
 
         /** MediaFormat.KEY_PRIORITY: 0 means realtime. */
         const val PRIORITY_REALTIME = 0
