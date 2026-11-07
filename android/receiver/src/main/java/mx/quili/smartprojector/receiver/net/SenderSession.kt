@@ -1,6 +1,7 @@
 package mx.quili.smartprojector.receiver.net
 
 import android.util.Log
+import mx.quili.smartprojector.protocol.AudioConfig
 import mx.quili.smartprojector.protocol.HandshakeStatus
 import mx.quili.smartprojector.protocol.PacketReader
 import mx.quili.smartprojector.protocol.PacketType
@@ -14,6 +15,7 @@ import mx.quili.smartprojector.protocol.writeWelcome
 import mx.quili.smartprojector.receiver.core.PairingStore
 import mx.quili.smartprojector.receiver.core.ReceiverState
 import mx.quili.smartprojector.receiver.core.ReceiverStatus
+import mx.quili.smartprojector.receiver.media.AudioPlayer
 import mx.quili.smartprojector.receiver.media.LatencyGuard
 import mx.quili.smartprojector.receiver.media.MirrorSurface
 import mx.quili.smartprojector.receiver.media.VideoDecoder
@@ -44,6 +46,9 @@ class SenderSession(
     private val latency = LatencyGuard { System.nanoTime() / 1_000 }
     private var framesSkipped = 0L
 
+    private var audio: AudioPlayer? = null
+    private var audioConfig: AudioConfig? = null
+
     fun run() {
         try {
             socket.tcpNoDelay = true
@@ -72,6 +77,7 @@ class SenderSession(
             decoder?.close()
             decoder = null
             decoderConfig = null
+            stopAudio()
             runCatching { socket.close() }
         }
     }
@@ -149,17 +155,18 @@ class SenderSession(
                     writer.write(PacketType.PONG)
                 }
 
+                PacketType.AUDIO_CONFIG -> {
+                    startAudio(AudioConfig.decode(reader.readPayload(header.payloadLength)))
+                }
+
+                PacketType.AUDIO_FRAME -> playAudio(reader, header.presentationTimeUs, header.payloadLength)
+
                 PacketType.BYE -> {
                     Log.i(TAG, "Sender said goodbye")
                     return
                 }
 
-                // Audio is not rendered yet; skipping keeps us interoperable with a
-                // newer sender instead of killing the session.
-                PacketType.AUDIO_CONFIG,
-                PacketType.AUDIO_FRAME,
-                PacketType.PONG,
-                -> reader.skipPayload(header.payloadLength)
+                PacketType.PONG -> reader.skipPayload(header.payloadLength)
             }
         }
     }
@@ -225,6 +232,37 @@ class SenderSession(
         framesSkipped = 0
         ReceiverStatus.publish(ReceiverState.Mirroring(senderName, config.width, config.height))
         Log.i(TAG, "Decoding ${config.width}x${config.height} from '$senderName'")
+    }
+
+    /** Audio is best effort: if it cannot start, the session carries on video-only. */
+    private fun startAudio(config: AudioConfig) {
+        if (audio != null && config == audioConfig) return
+        stopAudio()
+
+        audio = try {
+            AudioPlayer(config)
+        } catch (e: Exception) {
+            Log.w(TAG, "Audio unavailable ($config); continuing without it", e)
+            null
+        }
+        audioConfig = config.takeIf { audio != null }
+        if (audio != null) Log.i(TAG, "Playing audio $config")
+    }
+
+    private fun playAudio(reader: PacketReader, presentationTimeUs: Long, length: Int) {
+        val player = audio
+        val consumed = player != null &&
+            player.submit(presentationTimeUs, length) { buffer -> reader.readPayloadInto(buffer, length) }
+        // Frames before the config, or ones the decoder had no room for, still have to
+        // leave the socket so the stream stays aligned.
+        if (!consumed) reader.skipPayload(length)
+        if (player?.failed == true) stopAudio()
+    }
+
+    private fun stopAudio() {
+        audio?.close()
+        audio = null
+        audioConfig = null
     }
 
     private companion object {

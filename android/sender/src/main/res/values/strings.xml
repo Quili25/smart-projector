@@ -14,7 +14,9 @@
     <string name="stop">Detener</string>
 
     <string name="connecting_to">Conectando con %1$s…</string>
-    <string name="casting_to">Compartiendo pantalla con %1$s</string>
+    <string name="casting_to">Compartiendo pantalla y audio con %1$s</string>
+    <string name="casting_to_without_audio">Compartiendo pantalla con %1$s (sin audio)</string>
+    <string name="audio_permission_denied">Sin permiso de audio se comparte solo la pantalla.</string>
     <string name="casting_resolution">%1$d x %2$d</string>
 
     <string name="error_pin">Código incorrecto. Inténtalo de nuevo.</string>

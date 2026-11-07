@@ -75,6 +75,14 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.RequestPermission(),
     ) { /* Casting works regardless; the notification is just more visible. */ }
 
+    /** Asked right before capture consent; a refusal only costs the audio. */
+    private val audioPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        if (!granted) toast(getString(R.string.audio_permission_denied))
+        launchCaptureConsent()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
@@ -163,7 +171,10 @@ class MainActivity : AppCompatActivity() {
             is CastState.Casting -> {
                 binding.stop.visibility = View.VISIBLE
                 binding.receivers.visibility = View.GONE
-                binding.status.text = getString(R.string.casting_to, state.receiver.name)
+                binding.status.text = getString(
+                    if (state.withAudio) R.string.casting_to else R.string.casting_to_without_audio,
+                    state.receiver.name,
+                )
             }
 
             is CastState.Failed -> {
@@ -223,6 +234,19 @@ class MainActivity : AppCompatActivity() {
         pendingTarget = target
         pendingPin = pin
 
+        // Playback capture only exists on Android 10+; older phones cast video-only.
+        val needsAudioPermission = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        if (needsAudioPermission) {
+            audioPermission.launch(Manifest.permission.RECORD_AUDIO)
+        } else {
+            launchCaptureConsent()
+        }
+    }
+
+    private fun launchCaptureConsent() {
+        if (pendingTarget == null) return
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         captureConsent.launch(manager.createScreenCaptureIntent())
     }

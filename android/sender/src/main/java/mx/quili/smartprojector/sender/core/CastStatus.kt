@@ -38,6 +38,7 @@ sealed interface CastState {
         val receiver: DiscoveredReceiver,
         val width: Int,
         val height: Int,
+        val withAudio: Boolean,
     ) : CastState
 
     data class Failed(

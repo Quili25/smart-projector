@@ -246,3 +246,37 @@ sufijo, un APK de debug instalado durante el desarrollo bloquearía la instalaci
 del APK publicado, y la única salida sería desinstalar y perder el emparejamiento.
 Separarlos deja que convivan, y apagar la consulta evita ofrecerle al usuario una
 descarga que el sistema va a rechazar.
+
+---
+
+## D19 — Audio: captura de reproducción, AAC y búfer acotado
+
+**Decisión:** el emisor captura el audio de las apps con `AudioPlaybackCapture`
+(Android 10+), lo codifica en AAC-LC 48 kHz estéreo a 128 kbps y lo manda por la
+misma conexión TCP que el video. El receptor lo decodifica y lo reproduce en
+cuanto llega, sin agendarlo contra el reloj del video.
+
+**Razón:**
+
+- **Captura de reproducción, no micrófono.** Es el único mecanismo sin root que
+  entrega el audio interno. Respeta la política de cada app: medios y juegos sí,
+  llamadas nunca. Pide `RECORD_AUDIO` porque Android lo trata como el micrófono,
+  y por eso el servicio declara también el tipo `microphone`: desde Android 11 un
+  servicio en primer plano que no lo declara pierde ese acceso en segundo plano.
+- **AAC y no PCM.** PCM estéreo son 1.5 Mbps compitiendo con el video en el mismo
+  Wi-Fi; AAC son 128 kbps, y el decodificador AAC por software del proyector es
+  barato.
+- **Sin sincronía explícita.** Video y audio se muestran en cuanto llegan, así
+  que ambos van "en vivo" con latencias parecidas. Una sincronía por timestamps
+  obligaría a retrasar el más rápido de los dos.
+- **Búfer acotado.** El reloj del celular y el DAC del proyector nunca corren
+  igual. Tras un vacío el receptor mete 60 ms de silencio como colchón, y
+  descarta cualquier trama que lleve la cola por encima de 160 ms. Es el mismo
+  problema que el retraso creciente del video, resuelto del lado del audio.
+
+**Compatibilidad:** el número de versión del protocolo no cambia. Un receptor
+anterior ignora los paquetes de audio y un emisor anterior simplemente no los
+manda.
+
+**Opcional por diseño:** si el permiso se niega o algo falla al iniciar el audio,
+la sesión sigue solo con video.

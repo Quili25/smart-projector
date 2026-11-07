@@ -49,10 +49,10 @@ enum class PacketType(val code: Int) {
     /** One encoded H.264 access unit. */
     VIDEO_FRAME(0x02),
 
-    /** AAC codec-specific data. */
+    /** AAC-LC stream shape and AudioSpecificConfig, see [AudioConfig]. Precedes audio frames. */
     AUDIO_CONFIG(0x03),
 
-    /** One encoded AAC access unit. */
+    /** One raw AAC access unit (no ADTS header). */
     AUDIO_FRAME(0x04),
 
     PING(0x10),

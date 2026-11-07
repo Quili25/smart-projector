@@ -1,5 +1,6 @@
 package mx.quili.smartprojector.sender.service
 
+import android.Manifest
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -7,6 +8,8 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.ServiceInfo
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.media.projection.MediaProjection
@@ -18,6 +21,9 @@ import android.os.Looper
 import android.util.DisplayMetrics
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
+import androidx.core.content.ContextCompat
+import mx.quili.smartprojector.protocol.AudioConfig
 import mx.quili.smartprojector.protocol.HandshakeStatus
 import mx.quili.smartprojector.protocol.Hello
 import mx.quili.smartprojector.protocol.PacketFlags
@@ -34,6 +40,7 @@ import mx.quili.smartprojector.sender.core.CastState
 import mx.quili.smartprojector.sender.core.CastStatus
 import mx.quili.smartprojector.sender.core.DiscoveredReceiver
 import mx.quili.smartprojector.sender.core.SenderPrefs
+import mx.quili.smartprojector.sender.media.AudioCapture
 import mx.quili.smartprojector.sender.media.ScreenEncoder
 import mx.quili.smartprojector.sender.ui.MainActivity
 import java.io.IOException
@@ -56,6 +63,7 @@ class CastService : Service() {
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
     private var encoder: ScreenEncoder? = null
+    private var audio: AudioCapture? = null
     private var socket: Socket? = null
     private var writer: PacketWriter? = null
 
@@ -69,6 +77,9 @@ class CastService : Service() {
     /** Set once the receiver has acknowledged our format, so frames are not sent early. */
     @Volatile
     private var configSent = false
+
+    /** Whether the foreground service was started with the type audio capture needs. */
+    private var audioAllowed = false
 
     private val projectionCallback = object : MediaProjection.Callback() {
         override fun onStop() {
@@ -110,7 +121,7 @@ class CastService : Service() {
 
         running = true
         // Must precede getMediaProjection on Android 10+.
-        startForeground(NOTIFICATION_ID, buildNotification(target.name))
+        enterForeground(buildNotification(target.name))
         CastStatus.publish(CastState.Connecting(target))
 
         worker = Thread({ cast(target, pin, resultCode, resultData) }, "smartcast-sender").apply {
@@ -119,6 +130,42 @@ class CastService : Service() {
         }
         return START_NOT_STICKY
     }
+
+    /**
+     * Since Android 11 a foreground service only keeps "while in use" audio access in the
+     * background if it declares the microphone type, and playback capture is gated like
+     * the microphone. Android 14 refuses that type without RECORD_AUDIO, so without the
+     * permission (or if the system still says no) the cast continues video-only.
+     */
+    private fun enterForeground(notification: Notification) {
+        audioAllowed = hasAudioPermission()
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            startForeground(NOTIFICATION_ID, notification)
+            return
+        }
+
+        val projectionType = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        if (audioAllowed && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            try {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    notification,
+                    projectionType or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+                )
+                return
+            } catch (e: SecurityException) {
+                Log.w(TAG, "Microphone service type refused; casting without audio", e)
+                audioAllowed = false
+            }
+        }
+        ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, projectionType)
+    }
+
+    private fun hasAudioPermission(): Boolean =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED
 
     override fun onDestroy() {
         running = false
@@ -231,8 +278,33 @@ class CastService : Service() {
             null,
         )
 
-        CastStatus.publish(CastState.Casting(target, width, height))
-        Log.i(TAG, "Casting ${width}x$height @${fps}fps to ${target.host}")
+        val withAudio = startAudio(media, packetWriter)
+        CastStatus.publish(CastState.Casting(target, width, height, withAudio))
+        Log.i(TAG, "Casting ${width}x$height @${fps}fps to ${target.host}, audio=$withAudio")
+    }
+
+    /** @return whether audio is being streamed. Any failure leaves the video cast intact. */
+    private fun startAudio(media: MediaProjection, packetWriter: PacketWriter): Boolean {
+        if (!audioAllowed || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
+        // Re-checked here because the user can revoke it from settings at any time.
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return false
+        }
+
+        return try {
+            AudioCapture(media).also {
+                audio = it
+                it.start(AudioSink(packetWriter))
+            }
+            true
+        } catch (e: Exception) {
+            Log.w(TAG, "Audio capture unavailable; casting video only", e)
+            audio?.close()
+            audio = null
+            false
+        }
     }
 
     /**
@@ -310,6 +382,24 @@ class CastService : Service() {
         }
     }
 
+    /** Bridges audio encoder output onto the wire. Runs on the audio thread. */
+    private class AudioSink(private val packetWriter: PacketWriter) : AudioCapture.Sink {
+
+        private var lastConfig: AudioConfig? = null
+
+        override fun onAudioConfig(sampleRate: Int, channelCount: Int, codecSpecificData: ByteArray) {
+            val config = AudioConfig(sampleRate, channelCount, codecSpecificData)
+            if (config == lastConfig) return
+            lastConfig = config
+            packetWriter.write(PacketType.AUDIO_CONFIG, payload = config.encode())
+        }
+
+        override fun onAudioFrame(payload: ByteBuffer, presentationTimeUs: Long) {
+            if (lastConfig == null) return
+            packetWriter.write(PacketType.AUDIO_FRAME, PacketFlags.NONE, presentationTimeUs, payload)
+        }
+    }
+
     private fun fail(target: DiscoveredReceiver?, reason: CastFailure, detail: String?) {
         CastStatus.publish(CastState.Failed(target, reason, detail))
     }
@@ -318,6 +408,7 @@ class CastService : Service() {
         encoder?.stop()
         heartbeat?.interrupt()
 
+        runCatching { audio?.close() }
         runCatching { writer?.write(PacketType.BYE) }
         runCatching { virtualDisplay?.release() }
         runCatching { projection?.unregisterCallback(projectionCallback) }
@@ -328,6 +419,7 @@ class CastService : Service() {
         virtualDisplay = null
         projection = null
         encoder = null
+        audio = null
         writer = null
         socket = null
         configSent = false

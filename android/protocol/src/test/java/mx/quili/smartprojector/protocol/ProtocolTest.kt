@@ -325,3 +325,47 @@ class VideoConfigTest {
         }
     }
 }
+
+class AudioConfigTest {
+
+    /** AudioSpecificConfig for AAC-LC, 48 kHz, stereo. */
+    private val aacLcStereo48k = byteArrayOf(0x11, 0x90.toByte())
+
+    @Test
+    fun `config survives a round trip`() {
+        val config = AudioConfig(48_000, 2, aacLcStereo48k)
+
+        val decoded = AudioConfig.decode(config.encode())
+
+        assertEquals(48_000, decoded.sampleRate)
+        assertEquals(2, decoded.channelCount)
+        assertArrayEquals(aacLcStereo48k, decoded.codecSpecificData)
+        assertEquals(config, decoded)
+    }
+
+    @Test
+    fun `payload without codec data is rejected`() {
+        val header = AudioConfig(44_100, 1, aacLcStereo48k).encode().copyOf(5)
+        assertThrows(ProtocolException::class.java) { AudioConfig.decode(header) }
+    }
+
+    @Test
+    fun `out of range sample rate is rejected`() {
+        // 0x7FFFFFFF Hz, stereo, two bytes of codec data.
+        val payload = byteArrayOf(0x7F, -1, -1, -1, 2, 0x11, 0x90.toByte())
+        assertThrows(ProtocolException::class.java) { AudioConfig.decode(payload) }
+    }
+
+    @Test
+    fun `surround channel count is rejected`() {
+        val payload = AudioConfig(48_000, 2, aacLcStereo48k).encode().also { it[4] = 6 }
+        assertThrows(ProtocolException::class.java) { AudioConfig.decode(payload) }
+    }
+
+    @Test
+    fun `oversized codec data is rejected`() {
+        val payload = AudioConfig(48_000, 2, aacLcStereo48k).encode().copyOf(5) +
+            ByteArray(AudioConfig.MAX_CSD_BYTES + 1)
+        assertThrows(ProtocolException::class.java) { AudioConfig.decode(payload) }
+    }
+}

@@ -9,8 +9,8 @@ sin anuncios, sin marca de agua y sin límite de tiempo.
 
 | Módulo | Dónde vive | Qué hace |
 |---|---|---|
-| `android/receiver` | Proyector | Escucha, decodifica H.264 por hardware y pinta a pantalla completa |
-| `android/sender` | Celular Android | Captura la pantalla, codifica H.264 y la transmite |
+| `android/receiver` | Proyector | Escucha, decodifica H.264 por hardware y pinta a pantalla completa; reproduce el audio |
+| `android/sender` | Celular Android | Captura la pantalla (H.264) y el audio de las apps (AAC) y los transmite |
 | `android/protocol` | Compartido | Formato de cable, handshake y emparejamiento |
 | `android/updates` | Compartido | Consulta de actualizaciones contra la página LAN |
 
@@ -40,8 +40,13 @@ Para esos servicios, instálalos directamente en el proyector.
 
 Todo lo demás se espeja bien: YouTube, fotos, navegador, juegos, presentaciones.
 
-Otras limitaciones actuales: solo un emisor a la vez, y el audio todavía no se
-transmite (el protocolo ya lo contempla).
+**Audio.** Se transmite lo que reproducen las apps (videos, música, juegos), no
+el micrófono ni las llamadas. Requiere Android 10 o superior y el permiso de
+audio que la app pide al compartir; sin él, o en Android 9 y anteriores, se
+comparte solo la pantalla. Las apps que bloquean la captura (algunas con DRM)
+aportan silencio. El sonido también sigue saliendo por el celular.
+
+Otras limitaciones actuales: solo un emisor a la vez.
 
 ## Distribución y actualizaciones
 
