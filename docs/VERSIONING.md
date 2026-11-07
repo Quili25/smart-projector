@@ -1,27 +1,48 @@
-# Versionado
+# Versioning (`MAJOR.MINOR.PATCH`)
+
+Canonical file: [`VERSION`](../VERSION). Tags: `vX.Y.Z`.
+
+## Commit markers (merge to `main`)
+
+```text
+version: patch   # default
+version: minor
+version: major
+skip release
+```
+
+## Pipeline
+
+```text
+staging  →  CI + LAN quality gates (Hermes)
+main     →  CI → bump VERSION → tag → pack → GitHub Release
+```
+
+Do not reuse a published `X.Y.Z`. Promote to `main` only after LAN gates PASS.
+
+## Qué versión llevan los APK
 
 Las dos apps de SmartCast se versionan y publican **como un solo build**. Hablan el
 mismo protocolo de cable, así que dejarlas desfasadas es justo lo que rompe el
 espejo: el receptor rechazaría al emisor con `REJECTED_VERSION`.
 
-## versionName
+### versionName
 
-Sale del último tag de release alcanzable desde `HEAD` más los commits hechos
-después, siguiendo [Conventional Commits](https://www.conventionalcommits.org/):
+Sale de `VERSION`, no de una numeración propia. Gradle no decide bumps: eso le toca
+al workflow de release, que es quien bumpea el archivo y pone el tag.
 
-| Commits desde el tag | Resultado |
+| Dónde está HEAD | versionName |
 |---|---|
-| ninguno (HEAD está tageado) | `1.2.0` |
-| alguno con `!` o `BREAKING CHANGE:` | `2.0.0-beta.N` |
-| alguno con `feat:` | `1.3.0-beta.N` |
-| cualquier otra cosa | `1.2.1-beta.N` |
+| sobre el tag `vX.Y.Z` que coincide con `VERSION` | `X.Y.Z` |
+| cualquier commit posterior | `X.Y.(Z+1)-beta.N` |
 
-`N` es el número de commits desde el tag. Un repo sin tags arranca en `0.0.0`.
+`N` cuenta los commits desde el tag de release. Se usa el **siguiente patch** para
+que el nombre ordene después del release sobre el que está construido; cuál sea el
+bump real lo resuelve `scripts/detect-version-bump.ps1` al llegar a `main`.
 
-La lógica vive en `android/buildSrc` y está cubierta por tests; `./gradlew.bat
-printVersion` imprime lo que produciría el commit actual.
+`./gradlew.bat printVersion` imprime lo que produciría el commit actual.
 
-## versionCode
+### versionCode
 
 Es `git rev-list --count HEAD`.
 
@@ -33,16 +54,10 @@ a `main` son fast-forward, nunca rebases.
 Por eso `scripts/Publish-Lan.ps1` se niega a publicar un build cuyo `versionCode` no
 supere al que ya está en la página LAN.
 
-## Tags de release
-
-Un release se marca con un tag `vMAJOR.MINOR.PATCH` sobre el commit promovido a
-`main`. A partir de ahí los commits siguientes vuelven a ser `-beta.N` del
-siguiente número.
-
-## Ramas
-
-`staging` → `main`. Todo entra por `staging` y pasa por los gates del Debian; `main`
-solo recibe código ya validado en el hardware real.
+> Cualquier entorno que llegue a compilar los APK necesita la historia completa.
+> Un clon superficial (`actions/checkout` sin `fetch-depth: 0`) reportaría 1 commit
+> y produciría un `versionCode` de 1. Hoy solo se compila en esta máquina y en el
+> hub, los dos con clones completos.
 
 ## Firma
 

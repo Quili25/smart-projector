@@ -1,4 +1,4 @@
-import mx.quili.smartprojector.versioning.GitHistory
+import mx.quili.smartprojector.versioning.ProjectVersion
 
 plugins {
     alias(libs.plugins.android.application) apply false
@@ -17,7 +17,9 @@ fun gitOutput(vararg args: String): String? = runCatching {
 
 // Both apps are published together and version as one: they speak the same wire protocol, so
 // shipping them out of step is the one thing that breaks mirroring (docs/VERSIONING.md).
-val appVersionName: String = GitHistory.version { args -> gitOutput(*args.toTypedArray()) }.versionName
+val versionFile = rootProject.file("../VERSION")
+require(versionFile.isFile) { "Falta ${versionFile.path}, la fuente canónica de la versión (docs/VERSIONING.md)" }
+val appVersionName: String = ProjectVersion.of(versionFile.readText()) { args -> gitOutput(*args.toTypedArray()) }
 
 // versionCode must grow with every published build or Android refuses to install it as an
 // update; the commit count is monotonic along staging -> main because promotes fast-forward.
