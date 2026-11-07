@@ -140,15 +140,24 @@ class AudioPlayer(config: AudioConfig) : Closeable {
     }
 
     /**
-     * Never wraps the socket read in [submit], so only codec and track failures land here
-     * (CodecException, AudioTrack state and parameter errors), and none may end the session.
+     * The failures MediaCodec and AudioTrack report at runtime (CodecException is an
+     * IllegalStateException; the track builder throws the other two). None may end the
+     * session. Anything else is a bug and propagates.
      */
     private inline fun <T> guarded(block: () -> T): T? = try {
         block()
-    } catch (e: RuntimeException) {
-        if (!failed) Log.w(TAG, "Audio disabled after a codec or track error", e)
+    } catch (e: IllegalStateException) {
+        disable(e)
+    } catch (e: IllegalArgumentException) {
+        disable(e)
+    } catch (e: UnsupportedOperationException) {
+        disable(e)
+    }
+
+    private fun disable(cause: RuntimeException): Nothing? {
+        if (!failed) Log.w(TAG, "Audio disabled after a codec or track error", cause)
         failed = true
-        null
+        return null
     }
 
     override fun close() {

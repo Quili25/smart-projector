@@ -46,6 +46,9 @@ class AudioCapture @RequiresPermission(Manifest.permission.RECORD_AUDIO) constru
 
     @Volatile
     private var running = false
+
+    /** Started from the cast thread, joined from the main thread on teardown. */
+    @Volatile
     private var thread: Thread? = null
 
     init {
@@ -141,6 +144,7 @@ class AudioCapture @RequiresPermission(Manifest.permission.RECORD_AUDIO) constru
                 drain(sink)
             }
         } catch (e: Exception) {
+            // Uncaught, this would take down the whole app, video cast included.
             if (running) Log.w(TAG, "Audio capture ended", e)
         } finally {
             running = false
