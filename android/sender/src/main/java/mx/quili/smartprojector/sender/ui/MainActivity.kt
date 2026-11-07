@@ -28,6 +28,7 @@ import mx.quili.smartprojector.sender.core.DiscoveredReceiver
 import mx.quili.smartprojector.sender.core.SenderPrefs
 import mx.quili.smartprojector.sender.databinding.ActivityMainBinding
 import mx.quili.smartprojector.sender.databinding.DialogPinBinding
+import mx.quili.smartprojector.sender.media.PhoneMute
 import mx.quili.smartprojector.sender.net.MdnsDiscovery
 import mx.quili.smartprojector.sender.service.CastService
 import mx.quili.smartprojector.updates.AvailableUpdate
@@ -89,6 +90,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         prefs = SenderPrefs(this)
+        restoreVolumeAfterAbruptEnd()
 
         binding.receivers.layoutManager = LinearLayoutManager(this)
         binding.receivers.adapter = adapter
@@ -249,6 +251,14 @@ class MainActivity : AppCompatActivity() {
         if (pendingTarget == null) return
         val manager = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         captureConsent.launch(manager.createScreenCaptureIntent())
+    }
+
+    /** A cast killed with the process never ran its teardown, so it never unmuted the phone. */
+    private fun restoreVolumeAfterAbruptEnd() {
+        val state = CastStatus.state.value
+        if (state is CastState.Idle || state is CastState.Failed) {
+            PhoneMute(this, prefs).release()
+        }
     }
 
     private fun requestNotificationPermissionIfNeeded() {

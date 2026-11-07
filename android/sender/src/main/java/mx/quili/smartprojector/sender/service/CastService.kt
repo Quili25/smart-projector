@@ -41,6 +41,7 @@ import mx.quili.smartprojector.sender.core.CastStatus
 import mx.quili.smartprojector.sender.core.DiscoveredReceiver
 import mx.quili.smartprojector.sender.core.SenderPrefs
 import mx.quili.smartprojector.sender.media.AudioCapture
+import mx.quili.smartprojector.sender.media.PhoneMute
 import mx.quili.smartprojector.sender.media.ScreenEncoder
 import mx.quili.smartprojector.sender.ui.MainActivity
 import java.io.IOException
@@ -59,6 +60,7 @@ import java.nio.ByteBuffer
 class CastService : Service() {
 
     private lateinit var prefs: SenderPrefs
+    private lateinit var phoneMute: PhoneMute
 
     private var projection: MediaProjection? = null
     private var virtualDisplay: VirtualDisplay? = null
@@ -93,6 +95,7 @@ class CastService : Service() {
     override fun onCreate() {
         super.onCreate()
         prefs = SenderPrefs(this)
+        phoneMute = PhoneMute(this, prefs)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -278,18 +281,32 @@ class CastService : Service() {
             null,
         )
 
-        val withAudio = startAudio(media, packetWriter)
+        val withAudio = startAudio(target, media, packetWriter)
         if (withAudio) {
+            // The projector now carries the sound; playing it here too would echo.
+            phoneMute.engage()
             // Built before capture started, when audio was still unknown.
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
-                .notify(NOTIFICATION_ID, buildNotification(target.name, withAudio = true))
+            updateNotification(target.name, withAudio = true)
         }
         CastStatus.publish(CastState.Casting(target, width, height, withAudio))
         Log.i(TAG, "Casting ${width}x$height @${fps}fps to ${target.host}, audio=$withAudio")
     }
 
+    /** Runs on the audio thread when capture dies mid-cast; the picture keeps going. */
+    private fun onAudioLost(target: DiscoveredReceiver) {
+        phoneMute.release()
+        if (!running) return
+        updateNotification(target.name, withAudio = false)
+        (CastStatus.state.value as? CastState.Casting)?.let { CastStatus.publish(it.copy(withAudio = false)) }
+    }
+
+    private fun updateNotification(receiverName: String, withAudio: Boolean) {
+        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+            .notify(NOTIFICATION_ID, buildNotification(receiverName, withAudio))
+    }
+
     /** @return whether audio is being streamed. Any failure leaves the video cast intact. */
-    private fun startAudio(media: MediaProjection, packetWriter: PacketWriter): Boolean {
+    private fun startAudio(target: DiscoveredReceiver, media: MediaProjection, packetWriter: PacketWriter): Boolean {
         if (!audioAllowed || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return false
         // Re-checked here because the user can revoke it from settings at any time.
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
@@ -301,7 +318,7 @@ class CastService : Service() {
         return try {
             AudioCapture(media).also {
                 audio = it
-                it.start(AudioSink(packetWriter))
+                it.start(AudioSink(packetWriter), onFailure = { onAudioLost(target) })
             }
             true
         } catch (e: Exception) {
@@ -414,6 +431,7 @@ class CastService : Service() {
         heartbeat?.interrupt()
 
         runCatching { audio?.close() }
+        phoneMute.release()
         runCatching { writer?.write(PacketType.BYE) }
         runCatching { virtualDisplay?.release() }
         runCatching { projection?.unregisterCallback(projectionCallback) }

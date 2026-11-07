@@ -44,7 +44,9 @@ Todo lo demás se espeja bien: YouTube, fotos, navegador, juegos, presentaciones
 el micrófono ni las llamadas. Requiere Android 10 o superior y el permiso de
 audio que la app pide al compartir; sin él, o en Android 9 y anteriores, se
 comparte solo la pantalla. Las apps que bloquean la captura (algunas con DRM)
-aportan silencio. El sonido también sigue saliendo por el celular.
+aportan silencio. Mientras se comparte audio, el volumen multimedia del celular
+queda en silencio para que no suene en dos lugares; al detener se restaura.
+Las notificaciones y llamadas siguen sonando en el celular.
 
 Otras limitaciones actuales: solo un emisor a la vez.
 

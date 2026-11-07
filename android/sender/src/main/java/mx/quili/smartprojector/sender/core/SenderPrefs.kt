@@ -1,5 +1,6 @@
 package mx.quili.smartprojector.sender.core
 
+import android.annotation.SuppressLint
 import android.content.Context
 import java.util.UUID
 
@@ -43,9 +44,22 @@ class SenderPrefs(context: Context) {
     private fun pairedKeys(): Set<String> =
         prefs.getStringSet(KEY_PAIRED, emptySet()) ?: emptySet()
 
+    /**
+     * Set while a cast holds the phone's media output muted. Written synchronously when
+     * set, so a crash right after muting can never leave the phone silent with no record.
+     */
+    var mediaMutedByCast: Boolean
+        get() = prefs.getBoolean(KEY_MEDIA_MUTED, false)
+        @SuppressLint("ApplySharedPref")
+        set(value) {
+            val editor = prefs.edit().putBoolean(KEY_MEDIA_MUTED, value)
+            if (value) editor.commit() else editor.apply()
+        }
+
     private companion object {
         const val PREFS_NAME = "smartcast_sender"
         const val KEY_DEVICE_ID = "device_id"
         const val KEY_PAIRED = "paired_receivers"
+        const val KEY_MEDIA_MUTED = "media_muted_by_cast"
     }
 }

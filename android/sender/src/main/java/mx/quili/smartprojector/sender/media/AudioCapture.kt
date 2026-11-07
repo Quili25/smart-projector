@@ -107,18 +107,21 @@ class AudioCapture @RequiresPermission(Manifest.permission.RECORD_AUDIO) constru
         return encoder
     }
 
-    /** Starts capturing on a background thread. Failures end audio only, never the cast. */
-    fun start(sink: Sink) {
+    /**
+     * Starts capturing on a background thread. Failures end audio only, never the cast;
+     * [onFailure] runs on that thread when capture dies before [close].
+     */
+    fun start(sink: Sink, onFailure: () -> Unit) {
         check(thread == null) { "Already started" }
         running = true
         record.startRecording()
-        thread = Thread({ pump(sink) }, "smartcast-audio").apply {
+        thread = Thread({ pump(sink, onFailure) }, "smartcast-audio").apply {
             isDaemon = true
             start()
         }
     }
 
-    private fun pump(sink: Sink) {
+    private fun pump(sink: Sink, onFailure: () -> Unit) {
         var framesCaptured = 0L
         var startUs = -1L
 
@@ -145,7 +148,11 @@ class AudioCapture @RequiresPermission(Manifest.permission.RECORD_AUDIO) constru
             }
         } catch (e: Exception) {
             // Uncaught, this would take down the whole app, video cast included.
-            if (running) Log.w(TAG, "Audio capture ended", e)
+            if (running) {
+                Log.w(TAG, "Audio capture ended", e)
+                running = false
+                onFailure()
+            }
         } finally {
             running = false
         }

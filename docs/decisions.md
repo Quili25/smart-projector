@@ -279,6 +279,16 @@ cuanto llega, sin agendarlo contra el reloj del video.
   el búfer efectivo se reduce al colchón y se amplía al tope en cuanto avanza
   la reproducción.
 
+- **El celular se silencia mientras comparte audio.** La captura de reproducción
+  copia el audio y no lo desvía, así que sonaba en los dos aparatos con medio
+  segundo de diferencia. Una app normal no puede desviar la salida (eso exige
+  `MODIFY_AUDIO_ROUTING`, reservado al sistema). Lo que sí funciona: Android
+  captura a ganancia fija, sin importar el volumen del celular (verificado en el
+  CPH2531), así que basta con silenciar `STREAM_MUSIC`. La marca "silenciado
+  por SmartCast" se guarda antes de silenciar, y la app la revisa al abrir para
+  restaurar el volumen si una sesión murió sin limpiar. Si el usuario ya tenía
+  el celular en silencio, no se toca ni se deshace después.
+
 **Compatibilidad:** el número de versión del protocolo no cambia. Un receptor
 anterior ignora los paquetes de audio y un emisor anterior simplemente no los
 manda.
