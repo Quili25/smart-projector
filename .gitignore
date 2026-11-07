@@ -32,6 +32,7 @@ releases/
 *.keystore
 *.jks
 keystore.properties
+cert.sha256
 
 # Android / Gradle
 .gradle/
