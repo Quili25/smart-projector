@@ -45,6 +45,16 @@ function Resolve-Adb {
     throw "adb not found. Install Android platform-tools."
 }
 
+function Join-NativeArguments {
+    # ProcessStartInfo.ArgumentList does not exist on Windows PowerShell 5.1 (.NET
+    # Framework), so arguments are quoted by hand using the CommandLineToArgvW rules.
+    param([string[]]$Arguments)
+    ($Arguments | ForEach-Object {
+            if ($_ -and $_ -notmatch '[\s"]') { $_ }
+            else { '"' + (($_ -replace '(\\*)"', '$1$1\"') -replace '(\\+)$', '$1$1') + '"' }
+        }) -join ' '
+}
+
 function Invoke-Adb {
     param(
         [Parameter(Mandatory)][string]$AdbPath,
@@ -53,7 +63,7 @@ function Invoke-Adb {
 
     $psi = [System.Diagnostics.ProcessStartInfo]::new()
     $psi.FileName = $AdbPath
-    foreach ($a in $Arguments) { $psi.ArgumentList.Add($a) }
+    $psi.Arguments = Join-NativeArguments $Arguments
     $psi.RedirectStandardOutput = $true
     $psi.RedirectStandardError = $true
     $psi.UseShellExecute = $false
