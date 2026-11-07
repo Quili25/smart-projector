@@ -270,9 +270,14 @@ cuanto llega, sin agendarlo contra el reloj del video.
   que ambos van "en vivo" con latencias parecidas. Una sincronía por timestamps
   obligaría a retrasar el más rápido de los dos.
 - **Búfer acotado.** El reloj del celular y el DAC del proyector nunca corren
-  igual. Tras un vacío el receptor mete 60 ms de silencio como colchón, y
+  igual. Tras un vacío el receptor completa con silencio un colchón de 60 ms, y
   descarta cualquier trama que lleve la cola por encima de 160 ms. Es el mismo
   problema que el retraso creciente del video, resuelto del lado del audio.
+- **Arranque del `AudioTrack`.** En Android 11 un track en streaming no suena
+  hasta tener su búfer lleno. Con 300 ms de capacidad eso nunca pasaba bajo el
+  tope de 160 ms, y el audio quedaba mudo (visto en el H713). En cada arranque
+  el búfer efectivo se reduce al colchón y se amplía al tope en cuanto avanza
+  la reproducción.
 
 **Compatibilidad:** el número de versión del protocolo no cambia. Un receptor
 anterior ignora los paquetes de audio y un emisor anterior simplemente no los

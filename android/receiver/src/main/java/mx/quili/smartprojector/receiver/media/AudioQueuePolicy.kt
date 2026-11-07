@@ -7,27 +7,27 @@ package mx.quili.smartprojector.receiver.media
  * never run at exactly the same rate. Left alone, the queue in front of the DAC either
  * drains (clicks) or grows without bound (audio drifting behind the picture). So:
  *
- * - After an underrun, or at start, a short cushion of silence goes in first. That
- *   absorbs Wi-Fi jitter instead of underrunning again on the very next late packet.
- * - A chunk that would push the queue past [maxQueuedUs] is dropped. One 21 ms AAC frame
- *   is far less noticeable than audio that keeps sliding out of sync.
+ * - After an underrun, or at start, silence tops the queue up to [startFrames]. That
+ *   cushion absorbs Wi-Fi jitter instead of underrunning again on the next late packet.
+ * - A chunk that would push the queue past [maxQueuedFrames] is dropped. One 21 ms AAC
+ *   frame is far less noticeable than audio that keeps sliding out of sync.
  */
 class AudioQueuePolicy(
     sampleRate: Int,
     capacityFrames: Int,
-    primeUs: Long = DEFAULT_PRIME_US,
+    startUs: Long = DEFAULT_START_US,
     maxQueuedUs: Long = DEFAULT_MAX_QUEUED_US,
 ) {
 
     enum class Action { PRIME_THEN_WRITE, WRITE, DROP }
 
-    val primeFrames: Int = framesFor(primeUs, sampleRate)
+    val startFrames: Int = framesFor(startUs, sampleRate)
 
-    private val maxQueuedFrames: Long = minOf(framesFor(maxQueuedUs, sampleRate), capacityFrames).toLong()
+    val maxQueuedFrames: Int = minOf(framesFor(maxQueuedUs, sampleRate), capacityFrames)
 
     init {
         require(sampleRate > 0) { "Invalid sample rate $sampleRate" }
-        require(primeFrames < maxQueuedFrames) { "Prime ($primeFrames) must leave room below the cap ($maxQueuedFrames)" }
+        require(startFrames < maxQueuedFrames) { "Start ($startFrames) must leave room below the cap ($maxQueuedFrames)" }
     }
 
     fun decide(queuedFrames: Long, chunkFrames: Int): Action = when {
@@ -36,9 +36,12 @@ class AudioQueuePolicy(
         else -> Action.WRITE
     }
 
+    /** Silence that, followed by the chunk, fills an empty queue exactly to [startThreshold]. */
+    fun silenceBefore(chunkFrames: Int, startThreshold: Int): Int = (startThreshold - chunkFrames).coerceAtLeast(0)
+
     companion object {
         /** Covers typical 5 GHz jitter without adding a noticeable lip-sync offset. */
-        const val DEFAULT_PRIME_US = 60_000L
+        const val DEFAULT_START_US = 60_000L
 
         /** Roughly where audio lagging the picture starts to be noticeable. */
         const val DEFAULT_MAX_QUEUED_US = 160_000L

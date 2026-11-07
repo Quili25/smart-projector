@@ -279,6 +279,11 @@ class CastService : Service() {
         )
 
         val withAudio = startAudio(media, packetWriter)
+        if (withAudio) {
+            // Built before capture started, when audio was still unknown.
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+                .notify(NOTIFICATION_ID, buildNotification(target.name, withAudio = true))
+        }
         CastStatus.publish(CastState.Casting(target, width, height, withAudio))
         Log.i(TAG, "Casting ${width}x$height @${fps}fps to ${target.host}, audio=$withAudio")
     }
@@ -438,7 +443,7 @@ class CastService : Service() {
         return model.ifBlank { "Celular" }
     }
 
-    private fun buildNotification(receiverName: String): Notification {
+    private fun buildNotification(receiverName: String, withAudio: Boolean = false): Notification {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -469,7 +474,9 @@ class CastService : Service() {
         )
 
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(getString(R.string.notification_casting))
+            .setContentTitle(
+                getString(if (withAudio) R.string.notification_casting_with_audio else R.string.notification_casting),
+            )
             .setContentText(receiverName)
             .setSmallIcon(R.drawable.ic_launcher)
             .setOngoing(true)

@@ -120,6 +120,8 @@ class AudioPlayer(config: AudioConfig) : Closeable {
 
     private fun play(pcm: ByteBuffer) {
         val out = output ?: return
+        out.widenOnceStarted()
+
         val chunkFrames = pcm.remaining() / out.bytesPerFrame
         val queued = AudioQueuePolicy.queuedFrames(out.framesWritten, out.track.playbackHeadPosition)
 
@@ -131,7 +133,7 @@ class AudioPlayer(config: AudioConfig) : Closeable {
 
             AudioQueuePolicy.Action.PRIME_THEN_WRITE -> {
                 if (out.framesWritten > 0) underruns++
-                out.write(out.silence.duplicate())
+                out.prime(chunkFrames)
             }
 
             AudioQueuePolicy.Action.WRITE -> Unit
@@ -168,16 +170,28 @@ class AudioPlayer(config: AudioConfig) : Closeable {
         runCatching { codec.release() }
     }
 
-    /** One AudioTrack and the bookkeeping that belongs to its clock. */
+    /**
+     * One AudioTrack and the bookkeeping that belongs to its clock.
+     *
+     * A streaming track stays silent until it holds a full buffer (or, from Android 12,
+     * its start threshold), and it re-enters that state after an underrun long enough
+     * to disable it. With the buffer sized for headroom that would mean 300 ms of delay
+     * before the first sound, or no sound at all once the policy caps the queue lower.
+     * So each start shrinks the effective buffer to the cushion, fills it, and widens it
+     * back to the cap as soon as the playback head moves.
+     */
     private class Output(val sampleRate: Int, val channels: Int) {
 
         val bytesPerFrame = channels * BYTES_PER_SAMPLE
         val track: AudioTrack
         val policy: AudioQueuePolicy
-        val silence: ByteBuffer
+        private val silence: ByteBuffer
 
         var framesWritten = 0L
             private set
+
+        /** Playback head when the cushion went in; null once the track is running. */
+        private var headAtPrime: Int? = null
 
         init {
             require(channels in 1..2) { "Unsupported channel count $channels" }
@@ -185,7 +199,7 @@ class AudioPlayer(config: AudioConfig) : Closeable {
             val minBytes = AudioTrack.getMinBufferSize(sampleRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
             if (minBytes <= 0) throw IllegalStateException("No PCM output for ${sampleRate}Hz x$channels ($minBytes)")
 
-            // Room well above the policy cap, so a non-blocking write never comes back short.
+            // Allocated with headroom above the policy cap; the effective size is set per start.
             val capacityBytes = maxOf(
                 minBytes,
                 AudioQueuePolicy.framesFor(TRACK_BUFFER_US, sampleRate) * bytesPerFrame,
@@ -212,12 +226,30 @@ class AudioPlayer(config: AudioConfig) : Closeable {
             try {
                 check(track.state == AudioTrack.STATE_INITIALIZED) { "AudioTrack could not be initialized" }
                 policy = AudioQueuePolicy(sampleRate, capacityFrames = track.bufferSizeInFrames)
-                silence = ByteBuffer.allocateDirect(policy.primeFrames * bytesPerFrame)
+                silence = ByteBuffer.allocateDirect(policy.maxQueuedFrames * bytesPerFrame)
                 track.play()
             } catch (e: RuntimeException) {
                 track.release()
                 throw e
             }
+        }
+
+        /** Arms the start threshold and tops the queue up so the next chunk starts playback. */
+        fun prime(chunkFrames: Int) {
+            val threshold = track.setBufferSizeInFrames(policy.startFrames)
+            if (threshold < 0) throw IllegalStateException("setBufferSizeInFrames failed with $threshold")
+
+            val frames = policy.silenceBefore(chunkFrames, threshold).coerceAtMost(policy.maxQueuedFrames)
+            write(silence.duplicate().apply { limit(frames * bytesPerFrame) })
+            headAtPrime = track.playbackHeadPosition
+        }
+
+        fun widenOnceStarted() {
+            val head = headAtPrime ?: return
+            if (track.playbackHeadPosition == head) return
+            val size = track.setBufferSizeInFrames(policy.maxQueuedFrames)
+            if (size < 0) throw IllegalStateException("setBufferSizeInFrames failed with $size")
+            headAtPrime = null
         }
 
         fun write(pcm: ByteBuffer) {

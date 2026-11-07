@@ -14,7 +14,19 @@ class AudioQueuePolicyTest {
     @Test
     fun `an empty queue is primed before the first chunk`() {
         assertEquals(Action.PRIME_THEN_WRITE, policy.decide(queuedFrames = 0, chunkFrames = chunk))
-        assertEquals(2_880, policy.primeFrames)
+        assertEquals(2_880, policy.startFrames)
+    }
+
+    @Test
+    fun `silence plus the chunk exactly reaches the start threshold`() {
+        assertEquals(2_880 - chunk, policy.silenceBefore(chunk, startThreshold = 2_880))
+        // The track may round the threshold up; the cushion follows what it reports.
+        assertEquals(3_072 - chunk, policy.silenceBefore(chunk, startThreshold = 3_072))
+    }
+
+    @Test
+    fun `a chunk larger than the threshold needs no silence`() {
+        assertEquals(0, policy.silenceBefore(chunkFrames = 4_096, startThreshold = 2_880))
     }
 
     @Test
@@ -32,6 +44,7 @@ class AudioQueuePolicyTest {
     @Test
     fun `a small track buffer lowers the cap`() {
         val small = AudioQueuePolicy(rate, capacityFrames = 4_096)
+        assertEquals(4_096, small.maxQueuedFrames)
         assertEquals(Action.DROP, small.decide(queuedFrames = 3_500, chunkFrames = chunk))
     }
 
