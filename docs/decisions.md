@@ -288,6 +288,13 @@ cuanto llega, sin agendarlo contra el reloj del video.
   por SmartCast" se guarda antes de silenciar, y la app la revisa al abrir para
   restaurar el volumen si una sesión murió sin limpiar. Si el usuario ya tenía
   el celular en silencio, no se toca ni se deshace después.
+- **El silencio se sostiene.** Cualquier cambio de volumen (teclas o el slider
+  del sistema) quita el mute, y en la primera prueba eso bastó para que el audio
+  volviera a sonar en los dos. Mientras dura la sesión, el mute se revisa cada
+  200 ms y se vuelve a aplicar. Las teclas del celular quedan sin efecto y el
+  volumen se maneja con el control del proyector. Que esas teclas controlen el
+  volumen del proyector queda como mejora posible: requiere un paquete nuevo en
+  el protocolo.
 
 **Compatibilidad:** el número de versión del protocolo no cambia. Un receptor
 anterior ignora los paquetes de audio y un emisor anterior simplemente no los
